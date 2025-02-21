@@ -19,19 +19,24 @@ import redis.clients.jedis.Jedis;
 // Assumption - only support int/long/and string values
 public class Session {
 
+    private List<Object> objectList = new ArrayList<>();
     private Jedis jedisSession;
 
-    private Session() {
+    public Session() {
         jedisSession = new Jedis("localhost", 6379);;
     }
 
 
     public void add(Object obj) {
+        Class<?> clazz = obj.getClass();
+        objectList.add(clazz);
     }
 
 
-    public void persistAll()  {
+    public void persistAll() {
+
     }
+
 
 
     public Object load(Object object)  {
