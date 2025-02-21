@@ -118,7 +118,79 @@ public class Session {
 
 
     public Object load(Object object)  {
+        Class<?> clazz = object.getClass();
+        Field id = null;
 
+        for(Field field: clazz.getDeclaredFields()){
+            if(field.isAnnotationPresent(Persistable.class)){
+                id = field;
+                break;
+            }
+        }
+        if(id == null){
+            return null;
+        }
+        try{
+            id.setAccessible(true);
+            Object idVal = id.get(object);
+            if(idVal == null){
+                return null;
+            }
+            String redisKey = idVal.toString();
+
+            Map<String, String> redisData = jedisSession.hgetAll(redisKey);
+            if(redisData == null || redisData.isEmpty()){
+                return null;
+            }
+
+            Object post = clazz.getDeclaredConstructor().newInstance();
+
+            for(Field field: clazz.getDeclaredFields()){
+                field.setAccessible(true);
+
+                if(field.isAnnotationPresent(PersistableId.class) || field.isAnnotationPresent(PersistableField.class) && redisData.containsKey(field.getName())){
+                    String value = redisData.get(field.getName());
+                    if(field.getType().equals(String.class)){
+                        field.set(post, value);
+                    } else if (field.getType().equals(int.class) || field.getType().equals(Integer.class)){
+                        field.set(post, Integer.parseInt(value));
+                    }
+                }
+
+                if(field.isAnnotationPresent(PersistableListField.class)){
+                    String listValue = redisData.get(field.getName());
+                    if(listValue != null && !listValue.isEmpty()){
+                        String[] childIds = listValue.split(",");
+                        List<Object> childList = new ArrayList<>();
+                        PersistableListField listAnnotation = field.getAnnotation(PersistableListField.class);
+                        String childClassName = listAnnotation.className();
+                        Class<?> childClass = Class.forName(childClassName);
+                        for(String childId : childIds){
+                            Object partChild = childClass.getDeclaredConstructor().newInstance();
+                            for(Field childField : childClass.getDeclaredFields()){
+                                if(childField.isAnnotationPresent(PersistableId.class)){
+                                    childField.setAccessible(true);
+                                    if(childField.getType().equals(String.class)){
+                                        childField.set(partChild, childId);
+                                    } else if(childField.getType().equals(int.class) || childField.getType().equals(Integer.class)) {
+                                        childField.set(partChild, Integer.parseInt(childId));
+                                    }
+                                    break;
+                                }
+                            }
+                            Object fullChild = load(partChild);
+                            if(fullChild != null){
+                                childList.add(fullChild);
+                            }
+                        }
+                        field.set(post, childList);
+                    }
+                }
+            }
+            return post;
+        } catch (Exception e){
+            e.printStackTrace();
+        }
+        return null;
     }
-
 }

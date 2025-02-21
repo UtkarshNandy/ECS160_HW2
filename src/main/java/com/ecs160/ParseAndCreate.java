@@ -10,12 +10,10 @@ public class ParseAndCreate {
     public List<Post> parsePosts(String resourceName) throws Exception {
         List<Post> posts = new ArrayList<>();
 
-        // Open the resource file from the classpath
         InputStreamReader reader = new InputStreamReader(
                 getClass().getClassLoader().getResourceAsStream(resourceName)
         );
 
-        // Parse the JSON content
         JsonElement element = JsonParser.parseReader(reader);
 
         if (element.isJsonObject()) {
@@ -35,43 +33,41 @@ public class ParseAndCreate {
                     // Extract the main post's text content
                     String postContent = recordObject.get("text").getAsString();
 
-                    // Process replies if present
+                    // process replies
                     List<Post> repliesList = new ArrayList<>();
-                    if (threadObject.has("replies") && threadObject.get("replies").isJsonArray()) {
-                        JsonArray repliesArray = threadObject.getAsJsonArray("replies");
-                        int replyIdCounter = 0;
-                        for (JsonElement replyElem : repliesArray) {
-                            JsonObject replyObject = replyElem.getAsJsonObject();
+                    JsonArray repliesArray = threadObject.getAsJsonArray("replies");
 
-                            // Check if the reply object contains a non-null "record" element
-                            if (!replyObject.has("record") || replyObject.get("record").isJsonNull()) {
-                                continue; // Skip this reply if there's no valid "record" data
-                            }
+                    int replyIdCounter = 0;
+                    for (JsonElement replyElem : repliesArray) {
+                        JsonObject replyObject = replyElem.getAsJsonObject();
 
-                            JsonObject replyRecord = replyObject.getAsJsonObject("record");
-                            String replyContent = replyRecord.get("text").getAsString();
-
-                            Post replyPost = new Post();
-                            replyPost.setPostId(replyIdCounter);
-                            replyPost.setPostContent(replyContent);
-                            repliesList.add(replyPost);
-                            String replyId = String.valueOf(replyIdCounter);
-                            replyIdCounter++;
+                        if (!replyObject.has("post") || replyObject.get("post").isJsonNull()) {
+                            continue;
                         }
+
+                        JsonObject replyPostObject = replyObject.getAsJsonObject("post");
+
+                        if (!replyPostObject.has("record") || replyPostObject.get("record").isJsonNull()) {
+                            continue;
+                        }
+
+                        JsonObject replyRecord = replyPostObject.getAsJsonObject("record");
+
+                        String replyContent = replyRecord.get("text").getAsString();
+
+                        Post replyPost = new Post();
+                        replyPost.setPostId(replyIdCounter);
+                        replyPost.setPostContent(replyContent);
+                        repliesList.add(replyPost);
+                        replyIdCounter++;
                     }
+
 
                     // Create the main Post object with its replies
                     Post mainPost = new Post();
                     mainPost.setPostId(postIdCounter);
                     mainPost.setPostContent(postContent);
                     mainPost.setReplies(repliesList);
-                    List<String> replyIds = new ArrayList<>();
-                    if (mainPost.getReplies() != null) {
-                        for (int i = 0; i < mainPost.getReplies().size(); i++) {
-                            replyIds.add(mainPost.getPostId() + "_" + i);
-                        }
-                    }
-                    mainPost.setReplyIds(replyIds);
                     posts.add(mainPost);
                     // Increment for next post
                     postIdCounter++;
