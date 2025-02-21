@@ -34,13 +34,91 @@ public class Session {
 
 
     public void persistAll() {
+        for (Object obj : objectList) {
+            Class<?> clazz = obj.getClass();
+            // skip if not persistable
+            if (!clazz.isAnnotationPresent(Persistable.class)) {
+                continue;
+            }
+            String redisKey = "";
+            Map<String, String> redisData = new HashMap<>();
 
+            // loop thru declared fields
+            for (Field field : clazz.getDeclaredFields()) {
+                field.setAccessible(true);
+                try {
+                    // persist ID
+                    if (field.isAnnotationPresent(PersistableId.class)) {
+                        Object id = field.get(obj);
+                        if (id != null) {
+                            redisKey = id.toString();
+                            redisData.put(field.getName(), id.toString());
+                        }
+                    }
+                    // persist other fields
+                    if (field.isAnnotationPresent(PersistableField.class)) {
+                        Object value = field.get(obj);
+                        if (value != null) {
+                            redisData.put(field.getName(), value.toString());
+                        }
+                    }
+                    // persist list fields
+                    if (field.isAnnotationPresent(PersistableListField.class)) {
+                        Object listObj = field.get(obj);
+                        if (listObj instanceof List<?>) {
+                            List<?>list = (List<?>) listObj;
+                            List<String>idList = new ArrayList<>();
+                            for (Object element : list) {
+                                Class<?> elemClass = element.getClass();
+                                if(!elemClass.isAnnotationPresent(Persistable.class)){
+                                    continue;
+                                }
+                                String childRedisKey = "";
+                                Map<String, String> childData = new HashMap<>();
+
+                                for(Field elementField: elemClass.getDeclaredFields()){
+                                    elementField.setAccessible(true);
+
+                                    if(elementField.isAnnotationPresent(PersistableId.class)){
+                                        Object childId = elementField.get(element);
+                                        if(childId != null){
+                                            childRedisKey = childId.toString();
+                                            childData.put(elementField.getName(), childRedisKey);
+                                        }
+                                    }
+
+                                    if (elementField.isAnnotationPresent(PersistableField.class)) {
+                                        Object childValue = elementField.get(element);
+                                        if (childValue != null) {
+                                            childData.put(elementField.getName(), childValue.toString());
+                                        }
+                                    }
+                                }
+
+                                if (!childRedisKey.isEmpty()) {
+                                    jedisSession.hmset(childRedisKey, childData);
+                                    idList.add(childRedisKey);
+                                }
+                            }
+
+                            redisData.put(field.getName(), String.join(",", idList));
+                        }
+                    }
+                } catch (IllegalAccessException e) {
+                    e.printStackTrace();
+                }
+            }
+            if (!redisKey.isEmpty()) {
+                jedisSession.hmset(redisKey, redisData);
+            }
+        }
+        objectList.clear();
     }
 
 
 
     public Object load(Object object)  {
-        return null;
+
     }
 
 }

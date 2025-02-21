@@ -1,7 +1,9 @@
 package com.ecs160;
 
 import com.ecs160.persistence.Persistable;
+import com.ecs160.persistence.PersistableField;
 import com.ecs160.persistence.PersistableId;
+import com.ecs160.persistence.PersistableListField;
 
 import java.util.List;
 
@@ -9,7 +11,9 @@ import java.util.List;
 public class Post {
     @PersistableId
     private int postId;
+    @PersistableField
     private String postContent;
+    @PersistableListField(className = "Post")
     private List<Post> replies;
     private List<String> replyIds;
 

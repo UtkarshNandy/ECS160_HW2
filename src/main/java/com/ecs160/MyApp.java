@@ -19,7 +19,5 @@ public class MyApp {
             session.add(post);
         }
 
-
-
     }
 }
