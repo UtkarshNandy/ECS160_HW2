@@ -10,6 +10,11 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
+import com.ecs160.persistence.Persistable;
+import com.ecs160.persistence.PersistableField;
+import com.ecs160.persistence.PersistableId;
+import com.ecs160.persistence.PersistableListField;
+
 import javassist.util.proxy.MethodHandler;
 import javassist.util.proxy.ProxyFactory;
 import redis.clients.jedis.Jedis;
@@ -23,7 +28,8 @@ public class Session {
     private Jedis jedisSession;
 
     public Session() {
-        jedisSession = new Jedis("localhost", 6379);;
+        jedisSession = new Jedis("localhost", 6379);
+        System.out.println("Redis PING: " + jedisSession.ping());
     }
 
 
@@ -34,74 +40,97 @@ public class Session {
 
 
     public void persistAll() {
+        if (objectList.isEmpty()) {
+            System.out.println("No objects to persist. Ensure that you call session.add(obj) for each object.");
+            return;
+        }
+
+        System.out.println("Starting persistAll with " + objectList.size() + " object(s).");
         for (Object obj : objectList) {
             Class<?> clazz = obj.getClass();
-            // skip if not persistable
+
+            // Log the class name for debugging.
+            System.out.println("Processing object of type: " + clazz.getName());
+
+            // Skip if not persistable
             if (!clazz.isAnnotationPresent(Persistable.class)) {
+                System.out.println("Skipping object of type " + clazz.getName() + " because it is not annotated with @Persistable.");
                 continue;
             }
+
             String redisKey = "";
             Map<String, String> redisData = new HashMap<>();
 
-            // loop thru declared fields
+            // Loop through declared fields.
             for (Field field : clazz.getDeclaredFields()) {
                 field.setAccessible(true);
                 try {
-                    // persist ID
+                    // Persist ID
                     if (field.isAnnotationPresent(PersistableId.class)) {
                         Object id = field.get(obj);
                         if (id != null) {
                             redisKey = id.toString();
-                            redisData.put(field.getName(), id.toString());
+                            redisData.put(field.getName(), redisKey);
+                            System.out.println("Found @PersistableId field '" + field.getName() + "' with value: " + redisKey);
+                        } else {
+                            System.out.println("Field '" + field.getName() + "' annotated with @PersistableId is null.");
                         }
                     }
-                    // persist other fields
+                    // Persist other fields
                     if (field.isAnnotationPresent(PersistableField.class)) {
                         Object value = field.get(obj);
                         if (value != null) {
                             redisData.put(field.getName(), value.toString());
+                            System.out.println("Found @PersistableField '" + field.getName() + "' with value: " + value.toString());
+                        } else {
+                            System.out.println("Field '" + field.getName() + "' annotated with @PersistableField is null.");
                         }
                     }
-                    // persist list fields
+                    // Persist list fields
                     if (field.isAnnotationPresent(PersistableListField.class)) {
                         Object listObj = field.get(obj);
                         if (listObj instanceof List<?>) {
-                            List<?>list = (List<?>) listObj;
-                            List<String>idList = new ArrayList<>();
+                            List<?> list = (List<?>) listObj;
+                            List<String> idList = new ArrayList<>();
+                            System.out.println("Processing @PersistableListField '" + field.getName() + "' with " + list.size() + " element(s).");
                             for (Object element : list) {
                                 Class<?> elemClass = element.getClass();
-                                if(!elemClass.isAnnotationPresent(Persistable.class)){
+                                if (!elemClass.isAnnotationPresent(Persistable.class)) {
+                                    System.out.println("Skipping element of type " + elemClass.getName() + " (not @Persistable).");
                                     continue;
                                 }
                                 String childRedisKey = "";
                                 Map<String, String> childData = new HashMap<>();
-
-                                for(Field elementField: elemClass.getDeclaredFields()){
+                                for (Field elementField : elemClass.getDeclaredFields()) {
                                     elementField.setAccessible(true);
-
-                                    if(elementField.isAnnotationPresent(PersistableId.class)){
+                                    if (elementField.isAnnotationPresent(PersistableId.class)) {
                                         Object childId = elementField.get(element);
-                                        if(childId != null){
+                                        if (childId != null) {
                                             childRedisKey = childId.toString();
                                             childData.put(elementField.getName(), childRedisKey);
+                                            System.out.println("  Found child @PersistableId '" + elementField.getName() + "' with value: " + childRedisKey);
                                         }
                                     }
-
                                     if (elementField.isAnnotationPresent(PersistableField.class)) {
                                         Object childValue = elementField.get(element);
                                         if (childValue != null) {
                                             childData.put(elementField.getName(), childValue.toString());
+                                            System.out.println("  Found child @PersistableField '" + elementField.getName() + "' with value: " + childValue.toString());
                                         }
                                     }
                                 }
-
                                 if (!childRedisKey.isEmpty()) {
                                     jedisSession.hmset(childRedisKey, childData);
+                                    System.out.println("Persisted child object under key: " + childRedisKey + " with data: " + childData);
                                     idList.add(childRedisKey);
+                                } else {
+                                    System.out.println("Child element of type " + elemClass.getName() + " does not have a valid ID; skipping persistence for this element.");
                                 }
                             }
-
                             redisData.put(field.getName(), String.join(",", idList));
+                            System.out.println("Persisted list field '" + field.getName() + "' with child keys: " + String.join(",", idList));
+                        } else {
+                            System.out.println("Field '" + field.getName() + "' annotated with @PersistableListField is not a List or is null.");
                         }
                     }
                 } catch (IllegalAccessException e) {
@@ -110,10 +139,16 @@ public class Session {
             }
             if (!redisKey.isEmpty()) {
                 jedisSession.hmset(redisKey, redisData);
+                System.out.println("Persisted object under key: " + redisKey + " with data: " + redisData);
+            } else {
+                System.out.println("No valid ID found for object of type: " + clazz.getName() + ". Skipping persistence.");
             }
         }
         objectList.clear();
+        System.out.println("persistAll complete. Object list cleared.");
     }
+
+
 
 
 
