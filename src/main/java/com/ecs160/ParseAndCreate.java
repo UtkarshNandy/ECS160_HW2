@@ -21,6 +21,7 @@ public class ParseAndCreate {
             // Assuming the JSON contains a "feed" array
             JsonArray feedArray = jsonObject.get("feed").getAsJsonArray();
             int postIdCounter = 0;
+
             for (JsonElement feedElement : feedArray) {
                 JsonObject feedObject = feedElement.getAsJsonObject();
 
@@ -32,12 +33,14 @@ public class ParseAndCreate {
 
                     // Extract the main post's text content
                     String postContent = recordObject.get("text").getAsString();
+                    Post mainPost = new Post();
+                    mainPost.setPostId(postIdCounter++);
+                    mainPost.setPostContent(postContent);
 
                     // process replies
                     List<Post> repliesList = new ArrayList<>();
                     JsonArray repliesArray = threadObject.getAsJsonArray("replies");
 
-                    int replyIdCounter = 0;
                     for (JsonElement replyElem : repliesArray) {
                         JsonObject replyObject = replyElem.getAsJsonObject();
 
@@ -56,21 +59,14 @@ public class ParseAndCreate {
                         String replyContent = replyRecord.get("text").getAsString();
 
                         Post replyPost = new Post();
-                        replyPost.setPostId(replyIdCounter);
+                        replyPost.setPostId(postIdCounter++);
                         replyPost.setPostContent(replyContent);
                         repliesList.add(replyPost);
-                        replyIdCounter++;
                     }
 
-
-                    // Create the main Post object with its replies
-                    Post mainPost = new Post();
-                    mainPost.setPostId(postIdCounter);
-                    mainPost.setPostContent(postContent);
                     mainPost.setReplies(repliesList);
                     posts.add(mainPost);
-                    // Increment for next post
-                    postIdCounter++;
+
                 }
             }
         }

@@ -13,7 +13,7 @@ public class Post {
     private int postId;
     @PersistableField
     private String postContent;
-    @PersistableListField(className = "Post")
+    @PersistableListField(className = "com.ecs160.Post")
     private List<Post> replies;
 
     public int getPostId() {
